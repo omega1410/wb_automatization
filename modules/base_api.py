@@ -1,8 +1,9 @@
 import requests
 import logging
+import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from requests.exceptions import RequestException, ReadTimeout
+from requests.exceptions import RequestException, ReadTimeout, ConnectTimeout, ConnectionError
 
 
 class BaseAPIClient:
@@ -27,6 +28,9 @@ class BaseAPIClient:
         Создает и настраивает объект сессии requests.
         """
         session = requests.Session()
+        
+        # ВАЖНО: Отключаем использование системных прокси
+        session.trust_env = False
 
         # Настройка заголовков для аутентификации и типа контента
         session.headers.update(
@@ -40,55 +44,50 @@ class BaseAPIClient:
         if host_header:
             session.headers["Host"] = host_header
 
-        # Настройка повторных попыток для повышения надежности сети
-        # Повторяем запрос до 3 раз при ошибках сервера (5xx) с небольшой задержкой.
+        # НАСТРОЙКА ПОВТОРНЫХ ПОПЫТОК
         retries = Retry(
-            total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504]
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+            respect_retry_after_header=True
         )
         adapter = HTTPAdapter(max_retries=retries)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
 
-        # Важно: Попробуйте решить проблему с сертификатами, а не отключать проверку
+        # Отключаем проверку SSL
         session.verify = False
-        if not session.verify:
-            # Отключаем предупреждения только если проверка выключена
-            requests.packages.urllib3.disable_warnings(
-                requests.packages.urllib3.exceptions.InsecureRequestWarning
-            )
+        
+        # Отключаем предупреждения SSL
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         return session
 
     def _request(self, method, endpoint, **kwargs):
-        """
-        Выполняет HTTP запрос и обрабатывает основные ошибки.
-        """
         url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
-
-        # Устанавливаем таймаут по умолчанию, если он не передан в вызове
-        kwargs.setdefault("timeout", self.timeout)
+        
+        kwargs.setdefault("timeout", 15)
+        kwargs.setdefault("proxies", {"http": None, "https": None})
+        kwargs.setdefault("verify", False)
 
         try:
+            logging.info(f"🔄 Запрос: {method} {url}")
+            logging.info(f"📋 Заголовки Host: {self.session.headers.get('Host')}")
+            
             response = self.session.request(method, url, **kwargs)
-            logging.info(f"Запрос к {url} вернул статус {response.status_code}")
-
-            # Вызовет исключение для кодов ошибок 4xx/5xx
+            
+            logging.info(f"📊 Ответ: {response.status_code}")
+            if response.status_code != 200:
+                logging.info(f"📄 Тело ответа: {response.text[:200]}...")
+            
             response.raise_for_status()
 
-            # Проверяем, есть ли в ответе JSON
             if "application/json" in response.headers.get("Content-Type", ""):
                 return response.json()
-            # Если не JSON, возвращаем текст (может быть полезно для отладки)
             return response.text
 
-        except ReadTimeout:
-            # Обрабатываем таймаут ожидания ответа (актуально для Long Polling в чатах)
-            logging.info(
-                f"Таймаут ожидания ответа от {url}. Вероятно, нет новых данных."
-            )
-            return None
-
-        except RequestException as e:
-            # Обрабатываем все остальные ошибки сети (нет подключения, DNS и т.д.)
-            logging.error(f"Ошибка API запроса к {url}: {e}")
+        except Exception as e:
+            logging.error(f"❌ Ошибка: {e}")
             return None
