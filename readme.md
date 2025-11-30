@@ -15,11 +15,21 @@
 
 ## Архитектура проекта
 modules/
-    base_api.py Базовый клиент для работы с API
-    wb_marketplace_api.py Клиент для Marketplace API Wildberries
-    wb_chat.py Клиент для API чатов Wildberries
-    database.py Менеджер базы данных SQLite
-    yandex_disk.py Менеджер для работы с Яндекс.Диском
+
+### base_api.py 
+Базовый клиент для работы с API
+
+### wb_marketplace_api.py 
+Клиент для Marketplace API Wildberries
+
+### wb_chat.py 
+Клиент для API чатов Wildberries
+
+### database.py 
+Менеджер базы данных SQLite
+
+### yandex_disk.py 
+Менеджер для работы с Яндекс.Диском
 
 ### Модульная структура
 
