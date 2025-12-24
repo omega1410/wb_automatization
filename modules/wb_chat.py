@@ -3,6 +3,7 @@ import uuid
 import requests
 from .base_api import BaseAPIClient
 
+
 class WBChatAPI(BaseAPIClient):
     def __init__(self, api_key):
         self.api_key = api_key
@@ -15,12 +16,15 @@ class WBChatAPI(BaseAPIClient):
             timeout=15,
         )
         self.session.headers["Authorization"] = api_key
-        logging.info("🔧 WBChatAPI инициализирован")
+        logging.info("WBChatAPI инициализирован")
 
     def get_chats_list(self):
         try:
             url = "https://buyer-chat-api.wildberries.ru/api/v1/seller/chats"
-            headers = {"Authorization": self.api_key, "Content-Type": "application/json"}
+            headers = {
+                "Authorization": self.api_key,
+                "Content-Type": "application/json",
+            }
             response = requests.get(url, headers=headers, timeout=10, verify=False)
             if response.status_code == 200:
                 return response.json()
@@ -49,24 +53,20 @@ class WBChatAPI(BaseAPIClient):
                 "text": text,
                 "message": text,
                 "type": "text",
-                "replySign": reply_sign
+                "replySign": reply_sign,
             }
 
             headers = {
                 "Authorization": self.api_key,
                 "Content-Type": "application/json; charset=utf-8",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             }
 
             logging.info(f"Отправка в чат {chat_id}")
             logging.info(f"Payload ID: {payload['id']}")
 
             response = requests.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=30,
-                verify=False
+                url, json=payload, headers=headers, timeout=30, verify=False
             )
 
             if response.status_code == 200:
@@ -93,7 +93,11 @@ class WBChatAPI(BaseAPIClient):
                 return candidates[-1]
 
             chats_data = self.get_chats_list()
-            if chats_data and "result" in chats_data and "chats" in chats_data["result"]:
+            if (
+                chats_data
+                and "result" in chats_data
+                and "chats" in chats_data["result"]
+            ):
                 for chat in chats_data["result"]["chats"]:
                     if chat.get("chatID") == chat_id and "replySign" in chat:
                         return chat["replySign"]

@@ -257,13 +257,18 @@ class WBAutoBot:
                                         f"      Сохранен RID в кэш для чата {chat_id}"
                                     )
 
-                            message_data = event.get("message", {})
-                            attachments = message_data.get("attachments", {})
-                            images = attachments.get("images", [])
+                                    # Обновляем активность заказа
+                                    matched_order = self.match_chat_rid_to_order(rid)
+                                    if matched_order:
+                                        self.db.update_last_activity(matched_order)
 
-                            logging.info(
-                                f"      Проверка медиа-вложений: {len(images)} изображений"
-                            )
+                                message_data = event.get("message", {})
+                                attachments = message_data.get("attachments", {})
+                                images = attachments.get("images", [])
+
+                                logging.info(
+                                    f"      Проверка медиа-вложений: {len(images)} изображений"
+                                )
 
                             def clean_folder_name(name):
                                 cleaned = re.sub(r'[<>:"/\\|?*]', "_", name)
@@ -497,6 +502,10 @@ class WBAutoBot:
                 self.process_new_tasks()
                 self.process_chat_events()
 
+                # Проверяем неактивные заказы каждые 10 итераций (примерно раз в 10 минут при interval=60)
+                if iteration % 10 == 0:
+                    self.process_inactive_orders(inactive_hours=24)
+
                 logging.info(f"Следующая проверка через {interval_seconds} секунд...")
                 time.sleep(interval_seconds)
 
@@ -632,7 +641,8 @@ class WBAutoBot:
 
         try:
             if isinstance(order_date, datetime):
-                formatted_date = order_date.strftime("%d.%m.%Y в %H:%M")
+                dt_moscow = order_date + timedelta(hours=3)
+                formatted_date = dt_moscow.strftime("%d.%m.%Y в %H:%M")
 
             elif isinstance(order_date, str) and order_date != "неизвестно":
                 try:
@@ -644,7 +654,8 @@ class WBAutoBot:
                         clean_date = f"{main_part}+{timezone}"
 
                     dt = datetime.fromisoformat(clean_date)
-                    formatted_date = dt.strftime("%d.%m.%Y в %H:%M")
+                    dt_moscow = dt + timedelta(hours=3)  # UTC -> МСК
+                    formatted_date = dt_moscow.strftime("%d.%m.%Y в %H:%M (МСК)")
 
                 except Exception as e:
                     logging.warning(f"Не удалось распарсить дату '{order_date}': {e}")
@@ -730,6 +741,36 @@ class WBAutoBot:
                 "order_date": "неизвестно",
                 "nm_id": "неизвестно",
             }
+
+    def process_inactive_orders(self, inactive_hours=24):
+        logging.info(f"Проверка неактивных заказов (более {inactive_hours} часов)...")
+
+        inactive_orders = self.db.get_inactive_orders(hours=inactive_hours)
+
+        if not inactive_orders:
+            logging.info("Неактивных заказов не найдено.")
+            return
+
+        logging.info(f"Найдено неактивных заказов: {len(inactive_orders)}")
+
+        moved_count = 0
+        for order in inactive_orders:
+            rid = order[0]
+            article = order[1]
+
+            from_path = f"WB_Orders/{rid}"
+            to_path = f"WB_Empty_Orders/{rid}"
+
+            logging.info(f"Перемещение заказа {rid} ({article}) в WB_Empty_Orders...")
+
+            if self.disk.move_folder(from_path, to_path):
+                self.db.mark_as_moved(rid)
+                moved_count += 1
+                logging.info(f"Заказ {rid} перемещён в WB_Empty_Orders")
+            else:
+                logging.error(f"Не удалось переместить заказ {rid}")
+
+        logging.info(f"Перемещено неактивных заказов: {moved_count}")
 
 
 if __name__ == "__main__":

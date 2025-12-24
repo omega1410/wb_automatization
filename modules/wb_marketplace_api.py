@@ -16,9 +16,7 @@ class WBMarketplaceAPI(BaseAPIClient):
 
         if data and isinstance(data, dict) and "orders" in data:
             orders = data["orders"]
-            logging.info(
-                f"Получено новых заказов через Marketplace API: {len(orders)}"
-            )
+            logging.info(f"Получено новых заказов через Marketplace API: {len(orders)}")
             return orders
 
         logging.warning("Не удалось получить заказы или список пуст.")

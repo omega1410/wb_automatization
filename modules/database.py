@@ -21,7 +21,9 @@ class DatabaseManager:
                 price REAL,
                 createdAt TEXT,
                 status TEXT DEFAULT 'new',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                moved_to_empty INTEGER DEFAULT 0
             )
         """
         )
@@ -67,9 +69,7 @@ class DatabaseManager:
             )
             result = cursor.fetchone()
             if result:
-                logging.info(
-                    f"Найден заказ по orderUid: {order_uid} -> {result[1]}"
-                )
+                logging.info(f"Найден заказ по orderUid: {order_uid} -> {result[1]}")
             return result
         except Exception as e:
             logging.error(f"Ошибка поиска задания по orderUid: {e}")
@@ -86,3 +86,55 @@ class DatabaseManager:
                 logging.info(f"   Запись: {task}")
         except Exception as e:
             logging.error(f"Ошибка диагностики БД: {e}")
+
+    def update_last_activity(self, rid):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                UPDATE assembly_tasks 
+                SET last_activity = CURRENT_TIMESTAMP 
+                WHERE rid = ?
+            """,
+                (rid,),
+            )
+            self.conn.commit()
+            logging.info(f"Обновлена активность для заказа: {rid}")
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка обновления активности: {e}")
+            return False
+
+    def get_inactive_orders(self, hours=24):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT rid, article, createdAt 
+                FROM assembly_tasks 
+                WHERE moved_to_empty = 0 
+                AND datetime(last_activity) < datetime('now', ? || ' hours')
+            """,
+                (f"-{hours}",),
+            )
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения неактивных заказов: {e}")
+            return []
+
+    def mark_as_moved(self, rid):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                UPDATE assembly_tasks 
+                SET moved_to_empty = 1 
+                WHERE rid = ?
+            """,
+                (rid,),
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка отметки перемещения: {e}")
+            return False

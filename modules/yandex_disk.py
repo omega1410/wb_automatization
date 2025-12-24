@@ -40,9 +40,7 @@ class YandexDiskManager:
                 logging.error("Неверный токен Яндекс.Диска")
                 return False
             else:
-                logging.error(
-                    f"Ошибка доступа к Яндекс.Диску: {response.status_code}"
-                )
+                logging.error(f"Ошибка доступа к Яндекс.Диску: {response.status_code}")
                 return False
         except Exception as e:
             logging.error(f"Ошибка проверки токена: {e}")
@@ -105,9 +103,7 @@ class YandexDiskManager:
                 logging.info(f"Статус загрузки: {put_response.status_code}")
 
                 if put_response.status_code in [200, 201]:
-                    logging.info(
-                        f"Файл успешно загружен на Яндекс.Диск: {disk_path}"
-                    )
+                    logging.info(f"Файл успешно загружен на Яндекс.Диск: {disk_path}")
                     return True
                 else:
                     logging.error(
@@ -137,3 +133,32 @@ class YandexDiskManager:
         except requests.exceptions.RequestException as e:
             logging.error(f"Ошибка запроса к Yandex.Disk ({url}): {e}")
             return None
+
+    def move_folder(self, from_path, to_path):
+        try:
+            if not from_path.startswith("/"):
+                from_path = "/" + from_path
+            if not to_path.startswith("/"):
+                to_path = "/" + to_path
+
+            response = self.session.post(
+                "https://cloud-api.yandex.net/v1/disk/resources/move",
+                params={"from": from_path, "path": to_path},
+                timeout=30,
+            )
+
+            if response.status_code in [201, 202]:
+                logging.info(f"Папка перемещена: {from_path} -> {to_path}")
+                return True
+            elif response.status_code == 404:
+                logging.warning(f"Папка не найдена: {from_path}")
+                return False
+            else:
+                logging.error(
+                    f"Ошибка перемещения папки: {response.status_code} - {response.text}"
+                )
+                return False
+
+        except Exception as e:
+            logging.error(f"Ошибка при перемещении папки: {e}")
+            return False
