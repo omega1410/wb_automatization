@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from dotenv import load_dotenv
@@ -202,13 +202,23 @@ class WBAutoBot:
                             rid = None
                             found_by = None
 
+                            # Безопасное получение images (должно быть ДО условия с rid)
+                            message_data = event.get("message", {}) or {}
+                            attachments = message_data.get("attachments", {}) or {}
+                            images = attachments.get("images")
+                            if not images or not isinstance(images, list):
+                                images = []
+
+                            logging.info(
+                                f"      Проверка медиа-вложений: {len(images)} изображений"
+                            )
+
                             if chat_id in self.chat_rid_cache:
                                 rid = self.chat_rid_cache[chat_id]
                                 found_by = "кэша чата"
                                 logging.info(f"      Найден RID из {found_by}: {rid}")
                             else:
-                                message_data = event.get("message", {})
-                                attachments = message_data.get("attachments", {})
+                                # Используем уже полученные message_data и attachments
                                 good_card = attachments.get("goodCard")
 
                                 if good_card:
@@ -262,14 +272,6 @@ class WBAutoBot:
                                     if matched_order:
                                         self.db.update_last_activity(matched_order)
 
-                                message_data = event.get("message", {})
-                                attachments = message_data.get("attachments", {})
-                                images = attachments.get("images", [])
-
-                                logging.info(
-                                    f"      Проверка медиа-вложений: {len(images)} изображений"
-                                )
-
                             def clean_folder_name(name):
                                 cleaned = re.sub(r'[<>:"/\\|?*]', "_", name)
                                 cleaned = cleaned.strip(" .")
@@ -302,8 +304,11 @@ class WBAutoBot:
                                     "      RID не найден, сохраняем в папку чата"
                                 )
 
-                            if images:
-                                logging.info("      Обнаружены медиа-вложения...")
+                            # Проверка images перед вызовом download_chat_media
+                            if images and isinstance(images, list) and len(images) > 0:
+                                logging.info(
+                                    f"      Обнаружены медиа-вложения: {len(images)} изображений..."
+                                )
 
                                 if self.disk.create_folder(order_folder):
                                     time.sleep(1)
@@ -516,9 +521,18 @@ class WBAutoBot:
         saved_files = []
 
         try:
+            # Безопасное получение images с проверками
             message_data = message_event.get("message", {})
+            if not isinstance(message_data, dict):
+                message_data = {}
+
             attachments = message_data.get("attachments", {})
-            images = attachments.get("images", [])
+            if not isinstance(attachments, dict):
+                attachments = {}
+
+            images = attachments.get("images")
+            if not images or not isinstance(images, list):
+                images = []
 
             logging.info(f"      Начало обработки медиа: {len(images)} изображений")
 
@@ -722,14 +736,6 @@ class WBAutoBot:
             )
             return {
                 "order_id": folder_name_id,
-                "order_date": "неизвестно",
-                "nm_id": "неизвестно",
-            }
-
-        except Exception as e:
-            logging.error(f"Ошибка получения информации о заказе: {e}")
-            return {
-                "order_id": rid,
                 "order_date": "неизвестно",
                 "nm_id": "неизвестно",
             }
